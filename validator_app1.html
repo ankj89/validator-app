@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Validation Tool</title>
+
+<style>
+
+body{font-family:Arial;margin:0;background:#f4f6fb;}
+header{background:#1e3d8f;color:white;padding:14px;font-size:18px;}
+.container{padding:16px;max-width:1200px;margin:auto;}
+
+.card{
+background:white;
+padding:18px;
+margin-bottom:16px;
+border-radius:8px;
+border:1px solid #ddd;
+}
+
+.grid{
+display:grid;
+grid-template-columns:1fr 1fr 1fr;
+gap:10px;
+}
+
+@media(max-width:800px){
+.grid{grid-template-columns:1fr;}
+}
+
+input,select,textarea{
+width:100%;
+padding:8px;
+border-radius:6px;
+border:1px solid #ccc;
+}
+
+textarea{height:60px;}
+
+button{
+padding:10px 14px;
+border:none;
+background:#1e3d8f;
+color:white;
+border-radius:6px;
+margin:4px;
+cursor:pointer;
+}
+
+.roomTab{
+display:inline-block;
+padding:8px 12px;
+border:1px solid #ccc;
+margin:4px;
+border-radius:6px;
+cursor:pointer;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:10px;
+}
+
+table th,table td{
+border:1px solid #ddd;
+padding:6px;
+text-align:center;
+}
+
+.question{
+border-bottom:1px dashed #ddd;
+padding-bottom:10px;
+margin-bottom:12px;
+}
+
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+</head>
+
+<body>
+
+<header>2BHK Validation Tool</header>
+
+<div class="container">
+
+<div class="card">
+
+<h3>Project Details</h3>
+
+<div class="grid">
+
+<div><label>PID</label><input id="pid"></div>
+<div><label>Customer Name</label><input id="cx"></div>
+<div><label>City</label><input id="city"></div>
+<div><label>Address</label><input id="address"></div>
+<div><label>Society</label><input id="society"></div>
+<div><label>Flat No</label><input id="flat"></div>
+
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h3>Society Execution Constraints</h3>
+
+<div class="grid">
+
+<div>
+<label>Service Lift</label>
+<select id="serviceLift">
+<option></option>
+<option>Yes</option>
+<option>No</option>
+</select>
+</div>
+
+<div>
+<label>Service Lift Size</label>
+<input id="liftSize">
+</div>
+
+<div>
+<label>Passenger Lift</label>
+<select id="passLift">
+<option></option>
+<option>Allowed</option>
+<option>Not Allowed</option>
+<option>No Lift</option>
+</select>
+</div>
+
+<div>
+<label>Vehicle Entry</label>
+<select id="vehicle">
+<option></option>
+<option>Small Vehicles</option>
+<option>Large Vehicles</option>
+<option>Not Allowed</option>
+</select>
+</div>
+
+<div>
+<label>Power Supply</label>
+<select id="power">
+<option></option>
+<option>Yes</option>
+<option>No</option>
+</select>
+</div>
+
+<div>
+<label>Water Supply</label>
+<select id="water">
+<option></option>
+<option>Yes</option>
+<option>No</option>
+</select>
+</div>
+
+<div>
+<label>Mivan Construction</label>
+<select id="mivan">
+<option></option>
+<option>Yes</option>
+<option>No</option>
+</select>
+</div>
+
+<div>
+<label>Demolition Allowed</label>
+<select id="demo">
+<option></option>
+<option>Manual</option>
+<option>Mechanised</option>
+<option>Both</option>
+</select>
+</div>
+
+<div>
+<label>Work Timings</label>
+<input id="workTime">
+</div>
+
+<div>
+<label>Society Restrictions</label>
+<textarea id="societyRestrictions"></textarea>
+</div>
+
+</div>
+
+</div>
+
+
+<div class="card">
+
+<h3>Rooms</h3>
+
+<div id="roomTabs"></div>
+
+<button onclick="addRoom()">Add Room</button>
+
+</div>
+
+<div class="card" id="roomForm"></div>
+
+<div class="card">
+
+<button onclick="save()">Save</button>
+<button onclick="load()">Load</button>
+<button onclick="generateReport()">Generate PDF + Excel</button>
+
+</div>
+
+</div>
+
+
+<script>
+
+const walls=["NW","EW","SW","WW"]
+
+const defaultRooms=[
+"Living Room",
+"Kitchen",
+"Bedroom 1",
+"Bedroom 2",
+"Bathroom 1",
+"Bathroom 2",
+"Balcony"
+]
+
+
+const roomQuestions=[
+
+"False ceiling clearance sufficient",
+"Ceiling undulation present",
+"Water leakage on ceiling",
+"Sliding system feasible",
+"Window modification possible",
+"Window condition poor",
+"Module relocation possible",
+"15A power supply present",
+"Plumbing issues present",
+"Plumbing outdated",
+"Main inlet valve accessible",
+"Space for shower cubicle",
+"WC relocation possible",
+"Damp proof required",
+"Weather proof required",
+"Existing countertop present",
+"False ceiling damage",
+"Door condition poor",
+"Door refurbishable",
+"Termite infestation present"
+
+]
+
+
+const wallQuestions=[
+
+"Load bearing wall / Mivan wall",
+"Dry wall / Gypsum wall",
+"Major cracks requiring structural repair",
+"Surface undulation",
+"Undulation more than 6mm",
+"Minor cracks / loose plaster",
+"Core cut location available",
+"Switch/socket working condition",
+"Switchboard reusable",
+"Split AC possible",
+"Dark shade on wall",
+"Paint condition poor"
+
+]
+
+
+let data={rooms:{}}
+
+
+function init(){
+
+defaultRooms.forEach(r=>{
+data.rooms[r]={measurements:{},electrical:{},room:{},walls:{}}
+})
+
+renderTabs()
+
+}
+
+
+function renderTabs(){
+
+let html=""
+
+Object.keys(data.rooms).forEach(r=>{
+html+=`<span class="roomTab" onclick="openRoom('${r}')">${r}</span>`
+})
+
+document.getElementById("roomTabs").innerHTML=html
+
+}
+
+
+function addRoom(){
+
+let name=prompt("Room name")
+
+if(!name) return
+
+data.rooms[name]={measurements:{},electrical:{},room:{},walls:{}}
+
+renderTabs()
+
+}
+
+
+function openRoom(room){
+
+let r=data.rooms[room]
+
+let html=`<h3>${room}</h3>`
+
+
+html+=`
+<h4>Ceiling Height</h4>
+
+<div class="grid">
+
+<input placeholder="NW"
+value="${r.measurements.nw||''}"
+onchange="saveMeasure('${room}','nw',this.value)">
+
+<input placeholder="NE"
+value="${r.measurements.ne||''}"
+onchange="saveMeasure('${room}','ne',this.value)">
+
+<input placeholder="SE"
+value="${r.measurements.se||''}"
+onchange="saveMeasure('${room}','se',this.value)">
+
+<input placeholder="SW"
+value="${r.measurements.sw||''}"
+onchange="saveMeasure('${room}','sw',this.value)">
+
+<input placeholder="Center"
+value="${r.measurements.center||''}"
+onchange="saveMeasure('${room}','center',this.value)">
+
+</div>
+`
+
+
+html+=`
+<h4>Room Diagonal</h4>
+
+<div class="grid">
+
+<input placeholder="Diagonal 1"
+value="${r.measurements.d1||''}"
+onchange="saveMeasure('${room}','d1',this.value)">
+
+<input placeholder="Diagonal 2"
+value="${r.measurements.d2||''}"
+onchange="saveMeasure('${room}','d2',this.value)">
+
+</div>
+`
+
+
+html+=`
+<h4>Wall Deviation</h4>
+
+<div class="grid">
+
+<input placeholder="NW Wall"
+value="${r.measurements.devNW||''}"
+onchange="saveMeasure('${room}','devNW',this.value)">
+
+<input placeholder="EW Wall"
+value="${r.measurements.devEW||''}"
+onchange="saveMeasure('${room}','devEW',this.value)">
+
+<input placeholder="SW Wall"
+value="${r.measurements.devSW||''}"
+onchange="saveMeasure('${room}','devSW',this.value)">
+
+<input placeholder="WW Wall"
+value="${r.measurements.devWW||''}"
+onchange="saveMeasure('${room}','devWW',this.value)">
+
+</div>
+`
+
+
+html+=`
+<h4>Electrical Modules</h4>
+
+<table>
+
+<tr>
+<th>Wall</th>
+<th>4M</th>
+<th>6M</th>
+<th>8M</th>
+<th>12M</th>
+<th>Fan</th>
+<th>AC</th>
+<th>Comment</th>
+</tr>
+`
+
+walls.forEach(w=>{
+
+let e=r.electrical[w]||{}
+
+html+=`
+
+<tr>
+
+<td>${w}</td>
+
+<td><input type="number" value="${e['4M']||''}" onchange="saveElec('${room}','${w}','4M',this.value)"></td>
+
+<td><input type="number" value="${e['6M']||''}" onchange="saveElec('${room}','${w}','6M',this.value)"></td>
+
+<td><input type="number" value="${e['8M']||''}" onchange="saveElec('${room}','${w}','8M',this.value)"></td>
+
+<td><input type="number" value="${e['12M']||''}" onchange="saveElec('${room}','${w}','12M',this.value)"></td>
+
+<td><input type="number" value="${e['fan']||''}" onchange="saveElec('${room}','${w}','fan',this.value)"></td>
+
+<td><input type="number" value="${e['ac']||''}" onchange="saveElec('${room}','${w}','ac',this.value)"></td>
+
+<td><input value="${e['comment']||''}" onchange="saveElec('${room}','${w}','comment',this.value)"></td>
+
+</tr>
+`
+
+})
+
+html+="</table>"
+
+
+html+="<h4>Room Validation Questions</h4>"
+
+roomQuestions.forEach(q=>{
+
+let val=r.room[q]||{}
+
+html+=`
+
+<div class="question">
+
+<label>${q}</label>
+
+<select onchange="saveRoom('${room}','${q}',this.value)">
+
+<option></option>
+<option ${val.answer=='Yes'?'selected':''}>Yes</option>
+<option ${val.answer=='No'?'selected':''}>No</option>
+<option ${val.answer=='N.A'?'selected':''}>N.A</option>
+
+</select>
+
+<textarea onchange="saveRoomComment('${room}','${q}',this.value)">${val.comment||''}</textarea>
+
+</div>
+`
+
+})
+
+
+html+="<h4>Wall Validation Questions</h4>"
+
+wallQuestions.forEach(q=>{
+
+let val=r.walls[q]||{}
+
+html+=`
+
+<div class="question">
+
+<label>${q}</label>
+
+<select onchange="saveWall('${room}','${q}','answer',this.value)">
+
+<option></option>
+<option ${val.answer=='Yes'?'selected':''}>Yes</option>
+<option ${val.answer=='No'?'selected':''}>No</option>
+<option ${val.answer=='N.A'?'selected':''}>N.A</option>
+
+</select>
+
+<select multiple onchange="saveWallWalls('${room}','${q}',this)">
+
+<option ${val.walls?.includes('NW')?'selected':''}>NW</option>
+<option ${val.walls?.includes('EW')?'selected':''}>EW</option>
+<option ${val.walls?.includes('SW')?'selected':''}>SW</option>
+<option ${val.walls?.includes('WW')?'selected':''}>WW</option>
+
+</select>
+
+<textarea onchange="saveWall('${room}','${q}','comment',this.value)">${val.comment||''}</textarea>
+
+</div>
+`
+
+})
+
+document.getElementById("roomForm").innerHTML=html
+
+}
+
+
+/* SAVE FUNCTIONS */
+
+function saveMeasure(room,key,val){data.rooms[room].measurements[key]=val}
+
+function saveElec(room,wall,type,val){
+
+if(!data.rooms[room].electrical[wall])
+data.rooms[room].electrical[wall]={}
+
+data.rooms[room].electrical[wall][type]=val
+
+}
+
+function saveRoom(room,q,val){
+
+if(!data.rooms[room].room[q])
+data.rooms[room].room[q]={}
+
+data.rooms[room].room[q].answer=val
+
+}
+
+function saveRoomComment(room,q,val){
+
+if(!data.rooms[room].room[q])
+data.rooms[room].room[q]={}
+
+data.rooms[room].room[q].comment=val
+
+}
+
+function saveWall(room,q,type,val){
+
+if(!data.rooms[room].walls[q])
+data.rooms[room].walls[q]={}
+
+data.rooms[room].walls[q][type]=val
+
+}
+
+function saveWallWalls(room,q,el){
+
+let selected=[...el.selectedOptions].map(o=>o.value)
+
+if(!data.rooms[room].walls[q])
+data.rooms[room].walls[q]={}
+
+data.rooms[room].walls[q].walls=selected
+
+}
+
+
+function save(){
+localStorage.setItem("validatorData",JSON.stringify(data))
+alert("Saved")
+}
+
+function load(){
+let d=localStorage.getItem("validatorData")
+if(d){data=JSON.parse(d);renderTabs()}
+}
+
+
+/* REPORT GENERATION */
+
+function generateReport(){
+
+let rows=[]
+
+let project={
+PID:document.getElementById("pid").value,
+Customer:document.getElementById("cx").value,
+City:document.getElementById("city").value,
+Address:document.getElementById("address").value,
+Society:document.getElementById("society").value,
+Flat:document.getElementById("flat").value,
+ServiceLift:document.getElementById("serviceLift").value,
+LiftSize:document.getElementById("liftSize").value,
+PassengerLift:document.getElementById("passLift").value,
+Vehicle:document.getElementById("vehicle").value,
+Power:document.getElementById("power").value,
+Water:document.getElementById("water").value,
+Mivan:document.getElementById("mivan").value,
+Demolition:document.getElementById("demo").value,
+WorkTime:document.getElementById("workTime").value,
+Restrictions:document.getElementById("societyRestrictions").value
+}
+
+Object.keys(data.rooms).forEach(room=>{
+
+let r=data.rooms[room]
+
+Object.entries(r.measurements).forEach(([k,v])=>{
+rows.push({...project,Room:room,Category:"Measurement",Item:k,Value:v})
+})
+
+Object.entries(r.electrical).forEach(([wall,val])=>{
+Object.entries(val).forEach(([k,v])=>{
+rows.push({...project,Room:room,Category:"Electrical",Item:wall+" "+k,Value:v})
+})
+})
+
+Object.entries(r.room).forEach(([q,v])=>{
+rows.push({...project,Room:room,Category:"Room Question",Item:q,Value:v.answer,Comment:v.comment})
+})
+
+Object.entries(r.walls).forEach(([q,v])=>{
+rows.push({...project,Room:room,Category:"Wall Question",Item:q,Value:v.answer,Walls:(v.walls||[]).join(","),Comment:v.comment})
+})
+
+})
+
+
+let ws=XLSX.utils.json_to_sheet(rows)
+let wb=XLSX.utils.book_new()
+XLSX.utils.book_append_sheet(wb,ws,"Validation")
+XLSX.writeFile(wb,"site_validation.xlsx")
+
+
+const { jsPDF } = window.jspdf
+let doc=new jsPDF()
+
+let y=10
+doc.text("Site Validation Report",10,y)
+
+rows.forEach(r=>{
+y+=6
+if(y>280){doc.addPage();y=10}
+doc.setFontSize(9)
+doc.text(`${r.Room} | ${r.Category} | ${r.Item} : ${r.Value||''}`,10,y)
+})
+
+doc.save("site_validation_report.pdf")
+
+}
+
+
+/* AUTO SAVE */
+
+setInterval(()=>{
+localStorage.setItem("validatorData",JSON.stringify(data))
+},3000)
+
+init()
+
+</script>
+
+</body>
+</html>
