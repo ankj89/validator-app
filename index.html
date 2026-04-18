@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e3d8f">
+ <meta name="app-version" content="v1.3.2">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Livspace-Site Validation Tool 1.3</title>
+
+<script src="xlsx.full.min.js"></script>
+<script src="jszip.min.js"></script>
+<style>
+body{font-family:Arial;margin:0;background:#f4f6fb}
+header{background:#1e3d8f;color:white;padding:14px;font-size:18px}
+.container{padding:14px;max-width:1200px;margin:auto}
+.card{background:white;padding:16px;margin-bottom:14px;border-radius:8px;border:1px solid #ddd}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+label{font-weight:600;font-size:13px}
+input,textarea{width:100%;padding:6px;border-radius:6px;border:1px solid #ccc}
+textarea{height:50px}
+
+button{padding:8px 12px;border:none;background:#1e3d8f;color:white;border-radius:6px;margin:4px;cursor:pointer}
+
+.roomTab{display:inline-block;padding:8px 12px;border:1px solid #ccc;margin:3px;border-radius:6px;cursor:pointer}
+
+.wallBox{display:flex;gap:12px;margin-top:6px}
+
+.accordion{cursor:pointer;background:#eef2ff;padding:10px;border-radius:6px;margin-top:10px}
+.accordionContent{display:none;padding-top:10px}
+
+.questionBlock{padding:8px;border-radius:6px;margin-bottom:8px}
+.statusAnswered{background:#e6f7e6}
+.statusPending{background:#ffe6e6}
+
+.progressBar{height:8px;background:#ddd;border-radius:4px;margin-top:6px}
+.progressFill{height:100%;background:#1e3d8f;border-radius:4px}
+
+.summaryBox{background:#f9fafc;padding:10px;border-radius:6px;margin-bottom:10px}
+
+/* 🔥 TOGGLE */
+.toggleGroup{display:flex;gap:6px;margin-top:6px}
+.toggleBtn{padding:6px 10px;border:1px solid #ccc;border-radius:6px;cursor:pointer;background:#fff}
+.toggleBtn.active.yes{background:#28a745;color:#fff}
+.toggleBtn.active.no{background:#dc3545;color:#fff}
+.toggleBtn.active.na{background:#6c757d;color:#fff}
+</style>
+</head>
+
+<body>
+
+<header>Livspace - Site Validation Tool 1.2</header>
+
+<div class="container">
+
+<div class="card">
+<h3>Preliminary Project Details</h3>
+
+<div style="display:flex;flex-direction:column;gap:12px;">
+
+<input id="pid" placeholder="PID" onchange="saveData()">
+<input id="cx" placeholder="Cx Name" onchange="saveData()">
+
+<input id="city" list="cityList" placeholder="Select or type City" onchange="saveData()">
+<datalist id="cityList">
+<option value="Delhi">
+<option value="Mumbai">
+<option value="Bangalore">
+<option value="Hyderabad">
+<option value="Chennai">
+<option value="Pune">
+<option value="Kolkata">
+<option value="Ahmedabad">
+<option value="Jaipur">
+<option value="Gurgaon">
+<option value="Noida">
+</datalist>
+
+<input id="address" placeholder="Address" onchange="saveData()">
+<input id="society" placeholder="Society Name" onchange="saveData()">
+<input id="flat" placeholder="Flat No" onchange="saveData()">
+<input id="floorNo" placeholder="Floor No" onchange="saveData()">
+<button id="startValidationBtn" onclick="startValidation()">Start Validation</button>
+</div>
+</div>
+  
+<div id="validationApp" style="display:none;">
+
+<div class="card">
+<h3>Work environment & Society Constraints</h3>
+<div id="societyForm" style="display:flex;flex-direction:column;gap:8px;"></div>
+</div>
+
+<div class="card">
+<div id="roomTabs"></div>
+<button onclick="addRoom()">Add Room</button>
+<button onclick="resetData()">Reset Data</button>
+</div>
+
+<div class="card" id="roomForm"></div>
+
+<div class="card">
+<button onclick="generateExcel()">Generate Excel</button>
+<button onclick="downloadAllImages()">Download Images</button>
+<button id="endValidationBtn" onclick="endValidation()">End Validation</button>
+</div>
+
+</div>
+
+<script>
+const societyQuestions = [
+
+/* GENERAL */
+{key:"propertyType", label:"What is the type of property?", category:"General", options:["Bare Shell","Property Less than 15 yrs","Property More than 15 yrs"]},
+{key:"bhk", label:"What is the BHK?", category:"General",options:["1BHK","2BHK","3BHK","4BHK","5BHK","Villa","Penthouse"]},
+
+/* SOFT COST IDENTIFICATION */
+{key:"serviceLiftUsage", label:"Service lift usage allowed?", category:"Soft Cost Identification", options:["Yes,Heavy material movement allowed","Yes,Heavy material movement Not allowed","Yes,No material movement allowed","Service lift not present"]},
+{key:"servicelifttime", label:"What is the permissible time for lift usage?", category:"Soft Cost Identification", type:"textarea"},  
+{key:"loadingArea", label:"Is Debris/material loading/unloading space avaiable?", category:"Soft Cost Identification", options:["Yes","No"]},
+{key:"loadingAreadistance", label:"Record the distance of loading/unloading area from site (in ft)", category:"Soft Cost Identification", type:"number"},  
+{key:"societyDemolish", label:"What kind of demolition is allowed?", category:"Soft Cost Identification", options:["Mechanical","Only Manual","Mechanical or Manual"]},
+{key:"outstation", label:"Will there be outstation charges applicable?", category:"Soft Cost Identification", options:["Yes","No"]},
+
+/* ACCESS & DELIVERY */
+{key:"liftheight", label:"What is the height of service lift(in ft)?", category:"Access and Delivery constraints", options:["<7ft",">7ft"]},
+{key:"liftdepth", label:"What is the depth of service lift(in ft)?", category:"Access and Delivery constraints", options:["<4ft",">4ft"]},
+ {key:"liftlenght", label:"What is the lenght of service lift(in ft)?", category:"Access and Delivery constraints", options:["<3ft",">3ft"]}, 
+{key:"vehicleEntry", label:"Vehicle entry allowed inside the premises?", category:"Access and Delivery constraints", options:["Yes,8ft vehicle allowed","Yes,8ft and 14ft vehicle allowed","No"]},
+{key:"staircaseSize", label:"What is the available staircase width?Record in ft", category:"Access and Delivery constraints", type : "number"},
+
+/* EXECUTION */
+{key:"waterPoint", label:"Is there an active water supply point at site location?", category:"Execution Constraints", options:["Yes","No"]},
+{key:"electricPoint", label:"Is there an active power supply at site location?", category:"Execution Constraints", options:["Yes","No"]},
+ {key:"gassline", label:"Is there LPG gas line installed at site location?", category:"Execution Constraints", options:["Yes","No"]}, 
+ {key:"dgbackup", label:"Is there avaiability of DG/power backup?", category:"Execution Constraints", options:["Yes","No"]}, 
+{key:"workNOC", label:"Is builder/scoiety permission required to start the work?", category:"Execution Constraints", options:["Yes","No"]},
+{key:"workNOCpolice", label:"Is police verification required for labours?", category:"Execution Constraints", options:["Yes","No"]},  
+{key:"societyWorktimings", label:"Permissible work days and timings", category:"Execution Constraints", type:"textarea"},
+{key:"cxstay", label:"Will cx stay during execution?", category:"Execution Constraints",options:["Yes","No"]},
+/* MATERIAL */
+{key:"societyRestrictions", label:"Other restrictions on material/specification mandated by builder/society?", category:"Material Specification Constraint", type:"textarea"},
+{key:"faciaRestrictions", label:"Can we do modification on external walls in corridor or facia of building?", category:"Material Specification Constraint", options:["Yes","No"]},
+{key:"electricalmaterial", label:"What is the make and model of existing switchboard fixtures?", category:"Material Specification Constraint", type:"textarea"}
+];
+  
+const walls=["NW","EW","SW","WW"]
+/* 🔥 MEASUREMENT CONFIG */
+
+const measurementFields = [
+/* 🔥 NEW ADDITIONS */
+{label:"Available max door height (mm)", key:"doorheight"},
+{label:"Available max door width (mm)", key:"doorwidth"},  
+/* FLOOR TO CEILING */
+{label:"Floor to Ceiling - Corner 1 (mm)", key:"fc1"},
+{label:"Floor to Ceiling - Corner 2 (mm)", key:"fc2"},
+{label:"Floor to Ceiling - Corner 3 (mm)", key:"fc3"},
+{label:"Floor to Ceiling - Corner 4 (mm)", key:"fc4"},
+{label:"Floor to Ceiling - Cente (mm)", key:"fc5"},
+
+/* ROOM DIAGONALS */
+{label:"Room Diagonal 1 (mm)", key:"diag1"},
+{label:"Room Diagonal 2 (mm)", key:"diag2"},
+/* Opp wall pair */
+/* ORTHOGONALITY */
+{label:"WP1 Corner 1 (NW->SW)", key:"wp1_c1"},
+{label:"WP1 Center (NW->SW)", key:"wp1_mid"},
+{label:"WP1 Corner 2 (NW->SW)", key:"wp1_c2"},
+
+{label:"WP2 Corner 1 (EW->WW)", key:"wp2_c1"},
+{label:"WP2 Center (EW->WW)", key:"wp2_mid"},
+{label:"WP2 Corner 2 (EW->WW)", key:"wp2_c2"},
+
+/* WALL CENTER (1200mm) */
+{label:"NW Center (offset)", key:"NW_M"},
+{label:"EW Center (offset)", key:"EW_M"},
+{label:"SW Center (offset)", key:"SW_M"},
+{label:"WW Center (offset)", key:"WW_M"},
+
+/* WALL UPPER (~1800mm) */
+{label:"NW Upper (offset)", key:"NW_U"},
+{label:"EW Upper (offset)", key:"EW_U"},
+{label:"SW Upper (offset)", key:"SW_U"},
+{label:"WW Upper (offset)", key:"WW_U"},
+
+/* CEILING UTILITIES */
+{label:"Beam Bottom to Floor (mm)", key:"beamFloor"},
+{label:"Sprinkler Head to Floor (mm)", key:"sprinklerFloor"},
+
+/* SOFFIT (WALL-WISE) */
+{label:"Door Soffit to Ceiling - NW", key:"doorsoffitNW"},
+{label:"Door Soffit to Ceiling - EW", key:"doorsoffitEW"},
+{label:"Door Soffit to Ceiling - SW", key:"doorsoffitSW"},
+{label:"Door Soffit to Ceiling - WW", key:"doorsoffitWW"},
+/* SUNKUN SLAB */
+{label:"Sunken slab depth", key:"sunkslabdepth"},
+/* WINDOW SOFFIT */
+{label:"Window Soffit to Ceiling - NW", key:"winSoffitNW"},
+{label:"Window Soffit to Ceiling - EW", key:"winSoffitEW"},
+{label:"Window Soffit to Ceiling - SW", key:"winSoffitSW"},
+{label:"Window Soffit to Ceiling - WW", key:"winSoffitWW"}
+
+  
+]
+
+const roomQuestions=[
+"Existing flooring in good condition with appropriate slope/levels?",
+"Is existing skirting flushed?",   
+"In case of room extesnion is there a requirement to level the floors?Ex : balcony extensions",
+"Can we do tile on tile installation?", 
+"Are existing walls in plumb/line and level? Capture room diagonals in measurement section", 
+"Is there level difference in the true ceiling?Capture floor to ceiling dimesions in measurement section",
+"Are there any issues with the existing false ceiling that require removal and replacement?",                   
+"Are there visible undulations or uneven surface on the true ceiling?Mention treatment required in comments",
+"Are there any utilities (sprinkler pipes, plumbing line, ducts) or cross beams running on the ceiling? Capture the beam bottom to floor mesurement(in mm), Sprinkler head to Floor measurement(in mm) in mesurements section",
+"Is there any evidence of water leaks or moisture damage on the existing true ceiling?Mark on the layout as well and inform Cx",                    
+"Are the existing doors and door frame in good condition?",
+"Do we have sufficient opening available for furniture movement/shifting?Capture door height and width in measurement section",  
+"Are the existing windows and window frames in good condition?",
+"Does the existing windows have space to install additional tracks?",
+"Does existing grills require repair or re painting?", 
+"Is there sufficient space to provide swing shutters in wardrobes/storages etc?",
+"Is there sufficient space to provide bed with drawers?", 
+"Is existing wiring in good condition and does not require replacement?", 
+"Does the existing circuit have sufficient load capacity or will require change or new circuit?",
+"Are there plumbing points available?", 
+"Are there any issues with the existing plumbing lines, such as leaks etc that require replacement or repair?",
+"Are existing plumbing lines old and outdated and may not be compatible with modern fixtures?",
+"Are existing plumbing lines CPVC/UPVC?", 
+"Is the main inlet valve accesible?",
+"Is there sufficent space to provide shower cubicle?",
+"Is it possible to relocate the WC, without any modifications to external pipeline/drain line?",
+"Do we need to take floor protection in onsite work?",
+"Do we need to take deep cleaning in onsite work?"
+]
+const wallQuestions=["Is the wall a load-bearing wall/mivan construction/sheer wall?Mark in the structural layout as well",
+"Is the wall dry wall or gypsum wall?Mark in the structural layout as well",
+"Are there niches present?Mark in the structural layout as well",                     
+"Are there major cracks that require structural repair?Mark in the structural layout as well",
+"Are there hairline crack/minor cracks/loose plaster requiring re plastering?? Mark in the structural layout as well",
+"Does the existing wall surface have undulations or uneven surface?Capture mesurements in measurement section",
+"Are there evidence of water seepage or dampness that require waterproofing treatment? Mark on the structural layout as well and inform Cx",
+"Is there a suitable location for core cut available?",
+"Are existing switches and sockets in working condition?Capture wall wise modules and configuration in the comments and mark on layout",
+"Is there a AC point(low side works) provided?",
+"Can split AC be installed post false ceiling w/o pockets? Capture Wall wise Door/Window Soffit to Ceiling measurement in mesurement section",
+"Is panelling/pelmet required to be done for AC installation?",
+"Are there any darker shade on the wall?",
+"Is the existing paint in good condition, without excessive peeling, flaking, or bubbling?"
+]
+
+const defaultRooms=["Living Room","Kitchen","Bedroom 1","Bedroom 2","Bathroom 1","Bathroom 2","Balcony"]
+let approxSizeMB = parseFloat(localStorage.getItem("dbSizeMB") || "0")
+let db
+let isCameraOpen = false
+ let backPressTime = 0
+function initDB(){
+return new Promise((resolve, reject)=>{
+let request = indexedDB.open("SiteValidatorDB", 2) // version bump
+
+request.onupgradeneeded = function(e){
+db = e.target.result
+
+if(!db.objectStoreNames.contains("photos")){
+db.createObjectStore("photos", { keyPath: "id" })
+}
+
+// ✅ NEW STORE
+if(!db.objectStoreNames.contains("appData")){
+db.createObjectStore("appData", { keyPath: "id" })
+}
+}
+
+request.onsuccess = function(e){
+db = e.target.result
+resolve()
+}
+
+request.onerror = reject
+})
+}
+
+  
+let roomOrder=[...defaultRooms]
+let data = JSON.parse(localStorage.getItem("validatorData") || "null")
+
+// ✅ If no data → true fresh start
+if(!data){
+    data = {
+        validationMeta: {
+            started: false,
+            ended: false,
+            excelGenerated: false,
+            imagesDownloaded: false
+        },
+        rooms: {}
+    }
+}
+  
+
+function normalizeData(){
+if(!data.rooms)data.rooms={}
+defaultRooms.forEach(r=>{
+if(!data.rooms[r])data.rooms[r]={room:{},wall:{},wallSel:{},measurement:{},photos: {
+  "NW": [],
+  "EW": [],
+  "SW": [],
+  "WW": [],
+  "Ceiling": [],
+  "Floor": []
+}}
+})
+}
+normalizeData()
+function ensureValidationMeta(){
+    if(!data.validationMeta){
+        data.validationMeta = {
+            started: false,
+            ended: false,
+            excelGenerated: false,
+            imagesDownloaded: false
+        }
+    }
+}  
+
+function saveData(){
+let size = new Blob([JSON.stringify(data)]).size / (1024*1024)
+
+if(size > 10){
+    alert("⚠️ Large project data. Avoid closing or refreshing frequently.")
+}
+ 
+if(!db){
+    console.warn("DB not ready, retrying...")
+    setTimeout(saveData, 300)
+    return
+}
+data.project = {
+    pid: document.getElementById("pid").value,
+    cx: document.getElementById("cx").value,
+    city: document.getElementById("city").value,
+    address: document.getElementById("address").value,
+    society: document.getElementById("society").value,
+    flat: document.getElementById("flat").value,
+    floorNo: document.getElementById("floorNo").value
+}
+
+data.constraints={}
+data.roomOrder = roomOrder
+societyQuestions.forEach(q=>{
+let el=document.getElementById(q.key)
+if(el) data.constraints[q.key]=el.value
+})
+
+// ✅ SAVE IN DB
+saveAppData()
+}
+
+function populateProjectDetails(){
+
+if(!data.project) return
+
+document.getElementById("pid").value = data.project.pid || ""
+document.getElementById("cx").value = data.project.cx || ""
+document.getElementById("city").value = data.project.city || ""
+document.getElementById("address").value = data.project.address || ""
+document.getElementById("society").value = data.project.society || ""
+document.getElementById("flat").value = data.project.flat || ""
+document.getElementById("floorNo").value = data.project.floorNo || ""
+} 
+ 
+function startValidation(){
+   
+    ensureValidationMeta()  // ✅ ADD THIS
+let pidVal = document.getElementById("pid").value
+let cxVal = document.getElementById("cx").value
+let cityVal = document.getElementById("city").value
+
+if(!pidVal || !cxVal || !cityVal){
+    alert("Please fill PID, Cx Name, City")
+    return
+}
+
+    if(!confirm("Start validation?")){
+        return
+    }
+
+    data.validationMeta = {
+        started: true,
+        ended: false,
+        excelGenerated: false,
+        imagesDownloaded: false,
+        startTime: new Date().toLocaleString()
+    }
+
+    saveData()
+
+    renderAppSections()
+    renderSociety()
+    renderTabs(defaultRooms[0])
+    openRoom(defaultRooms[0])
+}
+async function endValidation(){
+await new Promise(r => setTimeout(r, 300))
+    if(!data.validationMeta.excelGenerated || !data.validationMeta.imagesDownloaded){
+        alert("Please generate Excel and download images before ending validation")
+        return
+    }
+
+    if(!confirm("End validation and reset app?")){
+        return
+    }
+
+    // 🔥 STOP unload warning
+    window.onbeforeunload = null
+
+    // 🔥 UI BLOCK
+    document.body.innerHTML = "<h2 style='text-align:center;margin-top:40px'>Finishing validation...</h2>"
+
+    try{
+
+        // 🔥 FORCE CLOSE DB CONNECTION
+        if(db){
+            db.close()
+        }
+
+        // 🔥 UNREGISTER SERVICE WORKER (CRITICAL FIX)
+        if ('serviceWorker' in navigator) {
+            let regs = await navigator.serviceWorker.getRegistrations()
+            for(let reg of regs){
+                await reg.unregister()
+            }
+        }
+
+        // 🔥 DELETE DATABASE
+        let req = indexedDB.deleteDatabase("SiteValidatorDB")
+
+        req.onsuccess = ()=>{
+            console.log("DB deleted")
+
+            localStorage.removeItem("dbSizeMB")
+
+         
+
+            location.href = location.origin + location.pathname
+        }
+
+        req.onerror = ()=>{
+            console.error("Delete failed")
+
+            // 🔥 FALLBACK RESET (VERY IMPORTANT)
+            localStorage.clear()
+
+            alert("Validation completed (fallback reset)")
+
+            location.href = location.origin + location.pathname
+        }
+
+        req.onblocked = ()=>{
+            console.warn("Still blocked — forcing reset")
+
+            // 🔥 FORCE RESET ANYWAY
+            localStorage.clear()
+
+            alert("Validation completed (forced reset)")
+
+            location.href = location.origin + location.pathname
+        }
+
+    }catch(err){
+        console.error(err)
+
+        // 🔥 LAST RESORT
+        localStorage.clear()
+
+        alert("Reset completed (safe mode)")
+
+        location.reload()
+    }
+}
+/* =========================
+   2. ADD SAVE FUNCTION
+========================= */
+function saveAppData(){
+return new Promise((resolve, reject)=>{
+
+try{
+
+let tx = db.transaction(["appData"], "readwrite")
+let store = tx.objectStore("appData")
+
+store.put({
+    id: "main",
+    data: data
+})
+
+tx.oncomplete = ()=>resolve()
+tx.onerror = (e)=>{
+    console.error("DB WRITE FAILED", e)
+    alert("⚠️ Data save failed. Please do not refresh. Try again.")
+    reject(e)
+}
+
+}catch(err){
+    console.error("DB ERROR", err)
+    alert("⚠️ Critical storage error")
+    reject(err)
+}
+
+})
+}
+/* =========================
+   3. ADD LOAD FUNCTION
+========================= */
+function loadAppData(){
+return new Promise((resolve, reject)=>{
+
+let tx = db.transaction(["appData"], "readonly")
+let store = tx.objectStore("appData")
+
+let req = store.get("main")
+
+req.onsuccess = ()=>{
+resolve(req.result ? req.result.data : null)
+}
+
+req.onerror = reject
+})
+}
+ 
+
+ 
+function renderAppSections(){
+if(!data.validationMeta || !data.validationMeta.started){
+        document.getElementById("validationApp").style.display = "none"
+        document.getElementById("startValidationBtn").style.display = "block"
+        return
+    }
+    let app = document.getElementById("validationApp")
+    let startBtn = document.getElementById("startValidationBtn")
+    let endBtn = document.getElementById("endValidationBtn")
+
+    if(data.validationMeta.started){
+
+        app.style.display = "block"
+        startBtn.style.display = "none"
+
+        // ✅ SHOW END ONLY AFTER BOTH DONE
+        if(data.validationMeta.excelGenerated && data.validationMeta.imagesDownloaded){
+            endBtn.style.display = "inline-block"
+        } else {
+            endBtn.style.display = "none"
+        }
+
+        renderSociety()
+
+        if(roomOrder.length > 0){
+            renderTabs(roomOrder[0])
+        }
+
+    } else {
+
+        app.style.display = "none"
+        startBtn.style.display = "inline-block"
+        endBtn.style.display = "none"
+    }
+
+    ["pid","cx","city","address","society","flat","floorNo"].forEach(id=>{
+        let el = document.getElementById(id)
+        if(el) el.disabled = data.validationMeta.started
+    })
+}
+  
+function renderTabs(activeRoom){
+
+const container = document.getElementById("roomTabs")
+
+container.innerHTML = roomOrder.map(r=>`
+<span class="roomTab" 
+style="${r===activeRoom ? 'background:#1e3d8f;color:white' : ''}">
+    
+<span onclick="openRoom('${r}')">${r}</span>
+
+<span onclick="renameRoom('${r}')" style="margin-left:6px;cursor:pointer;">✏️</span>
+
+<span onclick="deleteRoom('${r}')" style="margin-left:6px;color:red;cursor:pointer;">❌</span>
+
+</span>
+`).join("");
+
+}
+function calculateProgress(room){
+
+let r = data.rooms[room]
+let total = roomQuestions.length + wallQuestions.length
+let answered = 0
+
+roomQuestions.forEach(q=>{
+if(r.room[q]) answered++
+})
+
+wallQuestions.forEach(q=>{
+if(r.wall[q]) answered++
+})
+
+return Math.round((answered / total) * 100)
+} 
+function renameRoom(oldName){
+
+let newName = prompt("Enter new room name", oldName)
+if(!newName || newName === oldName) return
+
+if(data.rooms[newName]){
+    alert("Room already exists")
+    return
+}
+
+// move data
+data.rooms[newName] = data.rooms[oldName]
+delete data.rooms[oldName]
+
+// update order
+roomOrder = roomOrder.map(r => r === oldName ? newName : r)
+
+saveData()
+renderTabs(newName)
+openRoom(newName)
+}
+function deleteRoom(room){
+
+if(!confirm("Delete this room?")) return
+
+delete data.rooms[room]
+roomOrder = roomOrder.filter(r => r !== room)
+
+saveData()
+
+if(roomOrder.length){
+    renderTabs(roomOrder[0])
+    openRoom(roomOrder[0])
+}else{
+    document.getElementById("roomForm").innerHTML = ""
+}
+} 
+function scrollToNext(currentDiv){
+let all=document.querySelectorAll(".statusPending")
+for(let el of all){
+if(el.offsetTop>currentDiv.offsetTop){
+el.scrollIntoView({behavior:"smooth",block:"center"})
+break
+}
+}
+}
+
+/* 🔥 TOGGLE FUNCTION */
+function createToggle(value,onChange){
+let div=document.createElement("div")
+div.className="toggleGroup"
+
+let options=["Yes","No","NA"]
+
+options.forEach(opt=>{
+let btn=document.createElement("div")
+btn.className="toggleBtn"
+btn.innerText=opt
+
+btn.onclick=()=>{
+div.querySelectorAll(".toggleBtn").forEach(b=>b.classList.remove("active","yes","no","na"))
+
+btn.classList.add("active")
+btn.classList.add(opt.toLowerCase())
+
+onChange(opt)
+}
+
+if(value===opt){
+btn.classList.add("active")
+btn.classList.add(opt.toLowerCase())
+}
+
+div.appendChild(btn)
+})
+
+return div
+}
+
+
+
+function openRoom(room){
+if(data.validationMeta?.ended){
+    alert("Validation completed. Editing disabled.")
+    return
+}
+ if(!data.rooms[room]){
+    data.rooms[room] = {
+        room:{},wall:{},wallSel:{},measurement:{},
+        photos:{NW:[],EW:[],SW:[],WW:[],Ceiling:[],Floor:[]}
+    }
+} 
+const r=data.rooms[room]
+renderTabs(room)
+
+const container=document.getElementById("roomForm")
+container.innerHTML=""
+let progress = calculateProgress(room)
+
+let progressDiv = document.createElement("div")
+progressDiv.innerHTML = `
+<div>Progress: ${progress}%</div>
+<div class="progressBar">
+    <div class="progressFill" style="width:${progress}%"></div>
+</div>
+`
+
+container.appendChild(progressDiv)
+function createAccordion(title){
+let acc=document.createElement("div")
+acc.className="accordion"
+acc.textContent=title
+let content=document.createElement("div")
+content.className="accordionContent"
+let isOpen = data.uiState?.[title] || false
+
+acc.onclick=()=>{
+isOpen = !isOpen
+if(!data.uiState) data.uiState={}
+data.uiState[title] = isOpen
+content.style.display = isOpen ? "block" : "none"
+}
+container.appendChild(acc)
+container.appendChild(content)
+
+return content
+  
+}
+
+/* WALL */
+let wallSection=createAccordion("Wall Questions")
+
+
+
+wallQuestions.forEach(q=>{
+let div=document.createElement("div")
+div.className="questionBlock "+(r.wall[q]?"statusAnswered":"statusPending")
+
+let label=document.createElement("label")
+label.textContent=q
+
+let toggle=createToggle(r.wall[q], val=>{
+r.wall[q]=val
+saveData()
+div.className="questionBlock "+(val?"statusAnswered":"statusPending")
+scrollToNext(div)
+})
+
+let wallBox=document.createElement("div")
+wallBox.className="wallBox"
+
+walls.forEach(w=>{
+let cb=document.createElement("input")
+cb.type="checkbox"
+let arr=r.wallSel[q]||[]
+cb.checked=arr.includes(w)
+
+cb.onchange=()=>{
+let arr=r.wallSel[q]||[]
+if(cb.checked){if(!arr.includes(w))arr.push(w)}
+else{arr=arr.filter(x=>x!==w)}
+r.wallSel[q]=arr
+saveData()
+}
+wallBox.append(cb,w)
+})
+
+let textarea=document.createElement("textarea")
+textarea.value=r.wall[q+"-c"]||""
+
+textarea.oninput=()=>{
+r.wall[q+"-c"]=textarea.value
+saveData()
+}
+
+div.append(label,toggle,wallBox,textarea)
+wallSection.appendChild(div)
+})
+
+/* ROOM */
+let roomSection=createAccordion("Room Questions")
+
+roomQuestions.forEach(q=>{
+let div=document.createElement("div")
+div.className="questionBlock "+(r.room[q]?"statusAnswered":"statusPending")
+
+let label=document.createElement("label")
+label.textContent=q
+
+let toggle=createToggle(r.room[q], val=>{
+r.room[q]=val
+saveData()
+div.className="questionBlock "+(val?"statusAnswered":"statusPending")
+scrollToNext(div)
+})
+
+let textarea=document.createElement("textarea")
+textarea.value=r.room[q+"-c"]||""
+
+textarea.oninput=()=>{
+r.room[q+"-c"]=textarea.value
+saveData()
+}
+
+div.append(label,toggle,textarea)
+roomSection.appendChild(div)
+})
+/* 🔥 MEASUREMENT SECTION */
+let measureSection=createAccordion("Measurement Section")
+
+let m = r.measurement || {}
+r.measurement = m
+
+function createInput(labelText,key){
+
+let div=document.createElement("div")
+div.className="questionBlock"
+
+let label=document.createElement("label")
+label.innerText=labelText
+
+let input=document.createElement("input")
+input.type="number"
+input.placeholder="mm"
+input.value=m[key] || ""
+
+input.onchange=()=>{
+m[key]=parseFloat(input.value) || ""
+saveData()
+}
+
+div.append(label,input)
+return div
+}
+
+
+measurementFields.forEach(f=>{
+measureSection.appendChild(createInput(f.label,f.key))
+})
+/* 🔥 PHOTO SECTION (ADVANCED) */
+let photoSection=createAccordion("Site Photographs")
+photoSection.setAttribute("data-section","photo")
+
+refreshPhotoSection(room) 
+
+
+
+  
+}
+
+function savePhotoToDB(id, dataURL){
+return new Promise((resolve, reject)=>{
+let tx = db.transaction(["photos"], "readwrite")
+let store = tx.objectStore("photos")
+
+store.put({ id, data: dataURL })
+
+tx.oncomplete = ()=>resolve()
+tx.onerror = reject
+})
+}
+function getPhotoFromDB(id){
+return new Promise((resolve, reject)=>{
+let tx = db.transaction(["photos"], "readonly")
+let store = tx.objectStore("photos")
+
+let req = store.get(id)
+
+req.onsuccess = ()=>resolve(req.result?.data)
+req.onerror = reject
+})
+}  
+function deletePhotoFromDB(id){
+let tx = db.transaction(["photos"], "readwrite")
+let store = tx.objectStore("photos")
+store.delete(id)
+}
+
+  
+function generateExcel(){
+
+if (!data.validationMeta) data.validationMeta = {}
+
+data.validationMeta.endTime = new Date().toLocaleString()
+
+normalizeData()
+
+roomOrder.forEach(room=>{
+if(!data.rooms[room]){
+data.rooms[room]={
+room:{},wall:{},wallSel:{},measurement:{},
+photos:{NW:[],EW:[],SW:[],WW:[],Ceiling:[],Floor:[]}
+}
+}
+})
+
+saveData()
+
+/* =========================
+   🔴 TAB 1: VALIDATION DATA (LEGACY FORMAT)
+========================= */
+
+let rows = []
+
+Object.keys(data.rooms).forEach(room=>{
+
+let r = data.rooms[room]
+
+let base = {
+    pid: data.project?.pid || "",
+    cx: data.project?.cx || "",
+    city: data.project?.city || "",
+    address: data.project?.address || "",
+    society: data.project?.society || "",
+    flat: data.project?.flat || "",
+    floorNo: data.project?.floorNo || "",
+    Room: room
+}
+
+/* WALL QUESTIONS */
+wallQuestions.forEach(q=>{
+rows.push({
+    ...base,
+    Section: "Wall",
+    Item: q,
+    Value: r.wall[q] || "",
+    Walls: (r.wallSel[q] || []).join(", "),
+    Comments: r.wall[q+"-c"] || ""
+})
+})
+
+/* ROOM QUESTIONS */
+roomQuestions.forEach(q=>{
+rows.push({
+    ...base,
+    Section: "Room",
+    Item: q,
+    Value: r.room[q] || "",
+    Walls: "",
+    Comments: r.room[q+"-c"] || ""
+})
+})
+
+})
+
+/* =========================
+   🔴 CREATE WORKBOOK
+========================= */
+
+let wb = XLSX.utils.book_new()
+
+/* TAB 1 */
+let ws = XLSX.utils.json_to_sheet(rows)
+XLSX.utils.book_append_sheet(wb, ws, "Validation Data")
+
+/* =========================
+   🔴 TAB 2: SOCIETY CONSTRAINTS (AS YOU HAD)
+========================= */
+
+let constraintRows = []
+
+societyQuestions.forEach(q=>{
+constraintRows.push({
+Category: q.category,
+Question: q.label,
+Value: (data.constraints && data.constraints[q.key]) || ""
+})
+})
+
+let ws2 = XLSX.utils.json_to_sheet(constraintRows)
+XLSX.utils.book_append_sheet(wb, ws2, "Society Constraints")
+
+/* =========================
+   🔴 TAB 3: MEASUREMENTS
+========================= */
+
+let measureRows=[]
+
+Object.keys(data.rooms).forEach(room=>{
+
+let m = data.rooms[room].measurement || {}
+
+let row = { 
+    pid: data.project?.pid || "",
+    cx: data.project?.cx || "",
+    Room: room,
+    Validation_Start: data.validationMeta?.startTime || "",
+    Validation_End: data.validationMeta?.endTime || ""
+}
+
+measurementFields.forEach(f=>{
+row[f.key] = m[f.key] || ""
+})
+
+measureRows.push(row)
+
+})
+
+let ws3 = XLSX.utils.json_to_sheet(measureRows)
+XLSX.utils.book_append_sheet(wb, ws3, "Measurements")
+
+/* =========================
+   🔴 TAB 4: SUMMARY
+========================= */
+
+let summary = [{
+PID: data.project?.pid || "",
+Cx: data.project?.cx || "",
+City: data.project?.city || "",
+Start_Time: data.validationMeta?.startTime || "",
+End_Time: data.validationMeta?.endTime || ""
+}]
+
+let ws4 = XLSX.utils.json_to_sheet(summary)
+XLSX.utils.book_append_sheet(wb, ws4, "Summary")
+
+/* =========================
+   🔴 FILE NAME
+========================= */
+
+let pid = data.project?.pid || "PID"
+let cx = data.project?.cx || "Cx"
+
+pid = pid.replace(/[^a-zA-Z0-9]/g, "_")
+cx = cx.replace(/[^a-zA-Z0-9]/g, "_")
+
+let fileName = `${pid}_${cx}_site_validation_data.xlsx`
+
+XLSX.writeFile(wb, fileName)
+
+/* =========================
+   🔴 FLAGS
+========================= */
+
+data.validationMeta.excelGenerated = true
+saveData()
+renderAppSections()
+
+}
+
+function processImage(file, surface, room){
+
+let img = new Image()
+
+// 🔥 USE OBJECT URL INSTEAD OF BASE64
+let url = URL.createObjectURL(file)
+
+img.src = url
+
+img.onload = function(){
+if(img.width > 2000){
+    alert("Image too large. Please reduce camera resolution.")
+    return
+}
+ 
+let canvas = document.createElement("canvas")
+let ctx = canvas.getContext("2d")
+
+// 🔥 REDUCE SIZE (VERY IMPORTANT FOR MOBILE)
+canvas.width = img.width
+canvas.height = img.height
+
+ctx.drawImage(img,0,0,canvas.width,canvas.height)
+
+// 🔥 COMPRESS IMAGE
+let compressed = canvas.toDataURL("image/jpeg", 0.5)
+
+// 🔥 CLEAN MEMORY
+URL.revokeObjectURL(url)
+
+// 🔥 OPEN EDITOR
+openEditorDirect(compressed, surface, room)
+
+}
+}
+  
+async function openEditorDirect(imgSrc, surface, room, index = null){
+
+
+document.body.style.overflow = "hidden"
+
+let overlay = document.createElement("div")
+overlay.style.position = "fixed"
+overlay.style.top = 0
+overlay.style.left = 0
+overlay.style.width = "100%"
+overlay.style.height = "100%"
+overlay.style.background = "#000"
+overlay.style.zIndex = 9999
+
+overlay.innerHTML = `
+<div style="position:absolute;top:10px;left:10px;z-index:10;">
+<button id="drawBtn">Draw</button>
+<button id="textBtn">Text</button>
+<button id="saveBtn">Save</button>
+<button id="closeBtn">Close</button>
+</div>
+
+<canvas id="editorCanvas"></canvas>
+`
+
+document.body.appendChild(overlay)
+ isCameraOpen = true
+history.pushState({ editor: true }, "")
+let canvas = overlay.querySelector("#editorCanvas")
+let ctx = canvas.getContext("2d")
+
+canvas.style.touchAction = "none"
+canvas.addEventListener("touchstart", e => e.preventDefault(), { passive:false })
+canvas.addEventListener("touchmove", e => e.preventDefault(), { passive:false })
+ 
+  /* CLOSE */
+overlay.querySelector("#closeBtn").onclick = () => {
+    document.body.style.overflow = "auto"
+    canvas.replaceWith(canvas.cloneNode(true))
+    document.body.removeChild(overlay)
+
+    isCameraOpen = false
+
+   
+}
+
+  
+/* SAVE */
+
+overlay.querySelector("#saveBtn").onclick = async () => {
+
+    // 🔥 ENSURE DB IS READY (ADD THIS)
+    if(!db){
+        await initDB()
+    }
+
+    if(approxSizeMB > 80){
+        alert("Storage almost full. Please delete some images.")
+        return
+    }
+let btn = overlay.querySelector("#saveBtn")
+btn.innerText = "Saving..."
+btn.disabled = true
+
+try{
+
+let finalImg = canvas.toDataURL("image/jpeg", 0.7)
+
+
+let id = "img_" + Date.now()
+
+await savePhotoToDB(id, finalImg)
+approxSizeMB += finalImg.length / (1024*1024)
+localStorage.setItem("dbSizeMB", approxSizeMB)
+
+if(index !== null){
+data.rooms[room].photos[surface][index] = id
+}else{
+data.rooms[room].photos[surface].push(id)
+}
+
+saveData()
+refreshPhotoSection(room)
+
+document.body.style.overflow = "auto"
+canvas.replaceWith(canvas.cloneNode(true))
+document.body.removeChild(overlay)
+
+}catch(err){
+console.error(err)
+alert("Error saving image")
+btn.innerText = "Save"
+btn.disabled = false
+}
+}
+/* 🔥 CRITICAL: STOP SCROLL + ZOOM */
+
+
+/* STATE */
+let mode = "draw"
+let drawing = false
+function getCoords(e){
+    const rect = canvas.getBoundingClientRect()
+
+    const x = (e.clientX - rect.left) * (canvas.width / rect.width)
+    const y = (e.clientY - rect.top) * (canvas.height / rect.height)
+
+    return { x, y }
+}
+/* LOAD IMAGE */
+let img = new Image()
+img.src = imgSrc
+
+img.onerror = ()=>{
+alert("Image failed to load")
+document.body.removeChild(overlay)
+}
+
+img.onload = ()=>{
+
+    // ✅ Match canvas EXACTLY to displayed size
+    canvas.width = img.width
+    canvas.height = img.height
+
+    canvas.style.width = "100%"
+    canvas.style.height = "auto"
+
+    // 🔥 RESET ANY OLD TRANSFORMS
+    ctx.setTransform(1,0,0,1,0,0)
+
+    ctx.drawImage(img, 0, 0)
+}
+
+/* BUTTONS */
+overlay.querySelector("#drawBtn").onclick = () => mode = "draw"
+overlay.querySelector("#textBtn").onclick = () => mode = "text"
+
+/* DRAW (WORKS ON MOBILE + DESKTOP) */
+
+
+canvas.addEventListener("pointerdown", (e)=>{
+    if(mode !== "draw") return
+
+    drawing = true
+
+    const p = getCoords(e)
+
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+})
+
+canvas.addEventListener("pointermove", (e)=>{
+    if(!drawing || mode !== "draw") return
+
+    const p = getCoords(e)
+
+    ctx.lineTo(p.x, p.y)
+
+    ctx.strokeStyle = "red"
+    ctx.lineWidth = 4
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+
+    ctx.stroke()
+})
+
+canvas.addEventListener("pointerup", ()=>{
+    drawing = false
+    ctx.closePath()
+})
+
+canvas.addEventListener("pointercancel", ()=>{
+    drawing = false
+    ctx.closePath()
+})
+
+
+ 
+
+/* TEXT */
+canvas.addEventListener("pointerdown", (e)=>{
+
+    if(mode !== "text") return
+
+    // 🔥 STOP DRAW FROM ALSO TRIGGERING
+    e.preventDefault()
+
+    let txt = prompt("Enter note")
+
+    if(txt){
+
+        const p = getCoords(e)
+
+        ctx.fillStyle = "red"
+        ctx.font = `${Math.max(20, canvas.width / 25)}px Arial`
+        ctx.textBaseline = "top"
+
+        ctx.fillText(txt, p.x, p.y)
+    }
+
+})
+
+
+}
+
+
+
+function addRoom(){
+
+let name = prompt("Room name")
+if(!name) return
+
+if(!data.rooms[name]){
+    data.rooms[name]={
+        room:{},
+        wall:{},
+        wallSel:{},
+        measurement:{},
+        photos:{
+            "NW":[],
+            "EW":[],
+            "SW":[],
+            "WW":[],
+            "Ceiling":[],
+            "Floor":[]
+        }
+    }
+}
+
+roomOrder.push(name)
+data.roomOrder = roomOrder
+// ✅ FIX: re-render + open new room
+renderTabs(name)
+openRoom(name)
+
+saveData()
+}
+
+function saveAnnotated(room, surface, index, dataURL){
+
+data.rooms[room].photos[surface][index] = dataURL
+saveData()
+
+// 🔥 Only refresh photo section (no full re-render)
+refreshPhotoSection(room)
+
+}
+  
+  function goToNextRoom(currentRoom){
+
+let index = roomOrder.indexOf(currentRoom)
+
+if(index === -1) return
+
+// If last room → alert
+if(index === roomOrder.length - 1){
+alert("All rooms completed ✅")
+return
+}
+
+let nextRoom = roomOrder[index + 1]
+
+// Open next room
+openRoom(nextRoom)
+
+// Scroll to top
+window.scrollTo({top:0,behavior:"smooth"})
+}
+function renderSociety(){
+
+const container=document.getElementById("societyForm")
+container.innerHTML=""
+
+let grouped = {}
+
+societyQuestions.forEach(q=>{
+if(!grouped[q.category]) grouped[q.category]=[]
+grouped[q.category].push(q)
+})
+
+const order = [
+"General",
+"Soft Cost Identification",
+"Access and Delivery constraints",
+"Execution Constraints",
+"Material Specification Constraint"
+];
+
+order.forEach(category=>{
+
+if(!grouped[category]) return;
+
+let header=document.createElement("h4")
+header.innerText = category
+header.style.marginTop = "15px"
+header.style.color = "#1e3d8f"
+
+container.appendChild(header)
+
+grouped[category].forEach(q=>{
+
+let div=document.createElement("div")
+
+let label=document.createElement("label")
+label.innerText = q.label
+
+let input
+
+if(q.type==="textarea"){
+input=document.createElement("textarea")
+
+}else if(q.type==="number"){
+input=document.createElement("input")
+input.type="number"
+
+}else if(q.options){
+input=document.createElement("select")
+input.innerHTML="<option></option>" + q.options.map(o=>`<option>${o}</option>`).join("")
+
+}else{
+input=document.createElement("input")
+input.type="text"
+}
+
+input.id=q.key
+input.value=(data.constraints && data.constraints[q.key]) || ""
+input.onchange=saveData
+
+div.append(label,input)
+container.appendChild(div)
+
+})
+
+})
+
+}
+function startVersionWatcher(){
+
+    setTimeout(async ()=>{
+
+        try{
+            let res = await fetch("version.txt?v=" + Date.now())
+            let serverVersion = (await res.text()).trim()
+
+            let localVersion = localStorage.getItem("appVersion")
+
+            console.log("INIT CHECK → LOCAL:", localVersion, "SERVER:", serverVersion)
+
+            // 🔥 FIRST TIME SYNC
+            if(!localVersion){
+                localStorage.setItem("appVersion", serverVersion)
+                return
+            }
+
+            // 🔥 IF DIFFERENT → TRIGGER UPDATE
+            if(serverVersion !== localVersion){
+                showUpdateBanner(serverVersion)
+            }
+
+        }catch(err){
+            console.log("Initial version check failed", err)
+        }
+
+    }, 1000)
+
+
+    // 🔁 CONTINUOUS WATCH
+    setInterval(async ()=>{
+
+        try{
+            let res = await fetch("version.txt?v=" + Date.now())
+            let newVersion = (await res.text()).trim()
+
+            let oldVersion = localStorage.getItem("appVersion")
+
+            console.log("CHECK → OLD:", oldVersion, "NEW:", newVersion)
+
+            if(newVersion !== oldVersion){
+                showUpdateBanner(newVersion)
+            }
+
+        }catch(err){
+            console.log("Version check failed", err)
+        }
+
+    }, 5000)
+}
+let updateShown = false
+
+function showUpdateBanner(newVersion){
+
+    if(updateShown) return
+    updateShown = true
+
+    let oldVersion = localStorage.getItem("appVersion")
+
+    let confirmUpdate = confirm(
+        `New version available.\n\nCurrent: ${oldVersion}\nNew: ${newVersion}\n\nClick OK to update.`
+    )
+
+    if(confirmUpdate){
+        localStorage.setItem("appVersion", newVersion)
+        window.onbeforeunload = null
+        location.reload(true)
+    }
+}  
+async function openCamera(surface, room){
+
+    if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+
+        try{
+            let stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+  facingMode: "environment",
+  aspectRatio: 16/9
+}
+            })
+
+            let overlay = document.createElement("div")
+            overlay.style.position = "fixed"
+            overlay.style.top = 0
+            overlay.style.left = 0
+            overlay.style.width = "100%"
+            overlay.style.height = "100%"
+            overlay.style.background = "#000"
+            overlay.style.zIndex = 9999
+
+            overlay.innerHTML = `
+             <video autoplay playsinline 
+style="
+width:100%;
+height:100%;
+object-fit:cover;
+"></video>
+                <div style="position:fixed;bottom:20px;width:100%;text-align:center;">
+                    <button id="captureBtn">Capture</button>
+                    <button id="closeCam">Close</button>
+                </div>
+            `
+
+            document.body.appendChild(overlay)
+            isCameraOpen = true
+
+            // 🔥 PUSH STATE
+            history.pushState({ camera: true }, "")
+
+            let video = overlay.querySelector("video")
+            video.srcObject = stream
+
+            overlay.querySelector("#captureBtn").onclick = () => {
+
+          let canvas = document.createElement("canvas")
+let videoRatio = video.videoWidth / video.videoHeight
+let screenRatio = window.innerWidth / window.innerHeight
+
+let sx, sy, sw, sh
+
+if(videoRatio > screenRatio){
+    // video wider → crop sides
+    sh = video.videoHeight
+    sw = sh * screenRatio
+    sx = (video.videoWidth - sw) / 2
+    sy = 0
+}else{
+    // video taller → crop top/bottom
+    sw = video.videoWidth
+    sh = sw / screenRatio
+    sx = 0
+    sy = (video.videoHeight - sh) / 2
+}
+
+canvas.width = sw
+canvas.height = sh     
+
+                let ctx = canvas.getContext("2d")
+ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh)
+
+                let img = canvas.toDataURL("image/jpeg", 0.7)
+
+                stream.getTracks().forEach(t => t.stop())
+                document.body.removeChild(overlay)
+
+                openEditorDirect(img, surface, room)
+            }
+
+           overlay.querySelector("#closeCam").onclick = () => {
+    stream.getTracks().forEach(t => t.stop())
+    document.body.removeChild(overlay)
+
+    isCameraOpen = false
+
+    // 🔥 FIX BACK STACK
+
+}
+
+            return
+
+        }
+      
+catch(e){
+    console.log("Camera fallback", e)
+
+    // 🔥 FORCE FILE INPUT (iOS SAFE)
+    let input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.capture = "environment"
+
+    input.onchange = function(e){
+        let file = e.target.files[0]
+        if(file){
+            processImage(file, surface, room)
+        }
+    }
+
+    input.click()
+    return
+}
+     
+    }
+
+    // fallback
+    let input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.capture = "environment"
+
+    input.onchange = function(e){
+        let file = e.target.files[0]
+        if(file){
+            processImage(file, surface, room)
+        }
+    }
+
+    input.click()
+}  
+function refreshPhotoSection(room){
+
+let r = data.rooms[room]
+
+/* GET PHOTO SECTION */
+let photoSection = document.querySelector("[data-section='photo']")
+
+if(!photoSection) return
+
+/* PRESERVE OPEN STATE */
+let wasOpen = photoSection && photoSection.style.display === "block"
+
+/* CLEAR */
+photoSection.innerHTML = ""
+
+const surfaces = ["NW","EW","SW","WW","Ceiling","Floor"]
+
+surfaces.forEach(surface=>{
+
+let block=document.createElement("div")
+block.className="questionBlock"
+
+/* TITLE */
+let title=document.createElement("label")
+title.innerText=surface
+block.appendChild(title)
+
+/* ADD BUTTON */
+let btn=document.createElement("button")
+btn.innerText="Add Photo"
+btn.onclick=()=>openCamera(surface, room)
+block.appendChild(btn)
+
+/* IMAGE LIST */
+let list=document.createElement("div")
+list.style.display="flex"
+list.style.flexWrap="wrap"
+list.style.gap="8px"
+
+let photos = r.photos[surface] || []
+
+photos.forEach((photo, idx)=>{
+
+/* WRAPPER */
+let wrapper = document.createElement("div")
+wrapper.style.position = "relative"
+wrapper.style.display = "inline-block"
+
+/* IMAGE */
+let img=document.createElement("img")
+getPhotoFromDB(photo).then(src=>{
+if(src){
+img.src = src
+}else{
+img.src = "https://via.placeholder.com/80?text=No+Image"
+}
+})
+
+img.onerror = ()=>{
+img.src = "https://via.placeholder.com/80?text=Error"
+}
+img.style.width="80px"
+img.style.cursor="pointer"
+
+img.onclick = async ()=>{
+
+let src = await getPhotoFromDB(photo)
+
+openEditorDirect(src, surface, room, idx)
+}
+
+/* DELETE BUTTON */
+let del=document.createElement("div")
+del.innerText="✕"
+del.style.position="absolute"
+del.style.top="0"
+del.style.right="0"
+del.style.background="red"
+del.style.color="white"
+del.style.cursor="pointer"
+del.style.fontSize="12px"
+del.style.padding="2px 5px"
+del.style.borderRadius="0 6px 0 6px"
+
+/* DELETE ACTION */
+del.onclick=(e)=>{
+e.stopPropagation()
+
+if(confirm("Delete this photo?")){
+
+let id = data.rooms[room].photos[surface][idx]
+
+deletePhotoFromDB(id)
+
+data.rooms[room].photos[surface].splice(idx,1)
+
+saveData()
+refreshPhotoSection(room)
+}
+}
+
+/* APPEND */
+wrapper.appendChild(img)
+wrapper.appendChild(del)
+
+list.appendChild(wrapper)
+})
+
+block.appendChild(list)
+photoSection.appendChild(block)
+})
+
+/* RESTORE STATE */
+if(wasOpen){
+photoSection.style.display = "block"
+}
+}
+function resetData(){
+
+if(!confirm("This will delete all data including photos. Continue?")){
+    return
+}
+
+// 🔥 SHOW LOADER (DO NOT DESTROY UI)
+let loader = document.createElement("div")
+loader.innerHTML = "Resetting app..."
+loader.style.position = "fixed"
+loader.style.top = "0"
+loader.style.left = "0"
+loader.style.width = "100%"
+loader.style.height = "100%"
+loader.style.background = "rgba(0,0,0,0.7)"
+loader.style.color = "white"
+loader.style.display = "flex"
+loader.style.alignItems = "center"
+loader.style.justifyContent = "center"
+loader.style.zIndex = "9999"
+
+document.body.appendChild(loader)
+
+// 🔥 CLOSE DB FIRST (CRITICAL)
+if(db){
+    db.close()
+}
+
+// 🔥 DELETE DB
+let req = indexedDB.deleteDatabase("SiteValidatorDB")
+
+req.onsuccess = ()=>{
+    localStorage.clear()
+    location.reload()
+}
+
+req.onerror = ()=>{
+    alert("Reset failed. Retrying fallback...")
+
+    localStorage.clear()
+    location.reload()
+}
+
+req.onblocked = ()=>{
+    alert("Close other tabs of this app and retry")
+
+    document.body.removeChild(loader)
+}
+}
+async function downloadAllImages(){
+
+    let zip = new JSZip()
+
+    // 🔥 FILE NAME
+    let pid = data.project?.pid || "PID"
+    let cx = data.project?.cx || "Cx"
+
+    pid = pid.replace(/[^a-zA-Z0-9]/g, "_")
+    cx = cx.replace(/[^a-zA-Z0-9]/g, "_")
+
+    let zipName = `${pid}_${cx}_photos.zip`
+
+    // 🔥 COUNT TOTAL IMAGES
+    let total = 0
+    for(let room in data.rooms){
+        for(let surface in data.rooms[room].photos){
+            total += (data.rooms[room].photos[surface] || []).length
+        }
+    }
+
+    let processed = 0
+
+    // 🔥 SHOW LOADER
+    let loader = document.getElementById("zipLoader")
+    let text = document.getElementById("zipText")
+
+    loader.style.display = "flex"
+    text.innerText = `Zipping images: 0 / ${total}`
+
+    for(let room in data.rooms){
+
+      let cleanRoom = room.replace(/[^a-zA-Z0-9]/g, "_")
+      let roomFolder = zip.folder(cleanRoom)
+        let r = data.rooms[room]
+
+        for(let surface in r.photos){
+
+            let photos = r.photos[surface] || []
+
+            for(let i=0;i<photos.length;i++){
+
+                let id = photos[i]
+
+                let src = await getPhotoFromDB(id)
+                if(!src) continue
+
+                let blob = await fetch(src).then(res => res.blob())
+
+                let cleanRoom = room.replace(/[^a-zA-Z0-9]/g, "_")
+let fileName = `${cleanRoom}_${surface}_${i+1}.jpg`
+
+                roomFolder.file(fileName, blob)
+
+                // 🔥 UPDATE PROGRESS
+                processed++
+                text.innerText = `Zipping images: ${processed} / ${total}`
+            }
+        }
+    }
+
+    text.innerText = "Finalizing ZIP..."
+
+    let content = await zip.generateAsync({type:"blob"})
+
+    let url = URL.createObjectURL(content)
+
+if(/iPhone|iPad|iPod/i.test(navigator.userAgent)){
+    alert("On iPhone: tap Share → Save to Files to download")
+    window.open(url)
+}else{
+    let a = document.createElement("a")
+    a.href = url
+    a.download = zipName
+    a.click()
+}
+
+    // 🔥 HIDE LOADER
+    loader.style.display = "none"
+
+    alert("Images downloaded successfully ✅")
+
+    data.validationMeta.imagesDownloaded = true
+    saveData()
+    renderAppSections()
+}
+
+window.onbeforeunload = function () {
+    if(data.validationMeta?.started){
+        return "Validation in progress. Are you sure?"
+    }
+}
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js")
+      .then(reg => console.log("SW registered"))
+      .catch(err => console.log("SW failed", err));
+  });
+}
+
+ 
+
+document.addEventListener("DOMContentLoaded", async ()=>{
+
+startVersionWatcher()
+await initDB()
+// 🔥 iOS SAFE HISTORY INIT
+setTimeout(()=>{
+    history.pushState(null, "")
+}, 500)
+// ✅ LOAD FROM DB
+let stored = await loadAppData()
+
+if(!stored){
+
+    data = {
+        validationMeta: {
+            started: false,
+            ended: false,
+            excelGenerated: false,
+            imagesDownloaded: false
+        },
+        rooms: {}
+    }
+
+}else{
+    data = stored
+}
+roomOrder = data.roomOrder || [...defaultRooms]
+ensureValidationMeta()
+normalizeData()
+populateProjectDetails()
+
+if(data.validationMeta?.started){
+
+    renderAppSections()
+    renderSociety()
+    renderTabs(roomOrder[0])
+    openRoom(roomOrder[0])
+
+}else{
+
+    document.getElementById("validationApp").style.display = "none"
+    document.getElementById("startValidationBtn").style.display = "block"
+
+    document.getElementById("roomForm").innerHTML = ""
+    document.getElementById("roomTabs").innerHTML = ""
+    document.getElementById("societyForm").innerHTML = ""
+}
+
+})
+window.addEventListener("popstate", function(event){
+
+    if(isCameraOpen){
+        return
+    }
+
+    if(document.querySelector("#editorCanvas")){
+        return
+    }
+
+    if(data.validationMeta?.started){
+
+        let now = Date.now()
+
+        if(now - backPressTime < 1500){
+            window.onbeforeunload = null
+            history.back()
+        }else{
+            alert("Press back again to exit app")
+            backPressTime = now
+            history.pushState(null, "")
+        }
+    }
+})
+ 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+
+    try{
+
+        const reg = await navigator.serviceWorker.register("sw.js")
+
+        console.log("SW registered")
+
+        // 🔥 FORCE CHECK FOR UPDATE (VERY IMPORTANT)
+        reg.update()
+
+        // 🔥 LISTEN FOR NEW VERSION
+        reg.onupdatefound = () => {
+
+            const newWorker = reg.installing
+
+            newWorker.onstatechange = () => {
+
+                if (newWorker.state === "activated") {
+                    console.log("New SW activated → reloading")
+
+                    // 🔥 FORCE HARD RELOAD
+                    window.location.reload()
+                }
+            }
+        }
+
+    }catch(err){
+        console.log("SW failed", err)
+    }
+
+  });
+}
+ 
+</script>
+<div id="zipLoader" style="
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.7);
+color:white;
+display:none;
+align-items:center;
+justify-content:center;
+z-index:9999;
+font-size:18px;
+text-align:center;
+">
+<span id="zipText">Preparing...</span>
+</div>
+<div id="updateBanner" style="
+position:fixed;
+bottom:0;
+left:0;
+width:100%;
+background:#1e3d8f;
+color:white;
+padding:12px;
+text-align:center;
+display:none;
+z-index:9999;
+cursor:pointer;
+">
+New version available. Tap to update.
+</div>  
+</body>
+</html>
